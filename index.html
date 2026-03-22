@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>农历日程生成器</title>
+  <script src="https://cdn.jsdelivr.net/npm/lunar-javascript/lunar.min.js"></script>
+</head>
+
+<style>
+  header {
+    text-align: center;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont,
+      "Segoe UI", Roboto,
+      "Helvetica Neue", Arial,
+      sans-serif;
+    color: #1d1d1f;
+    background: #fff;
+  }
+
+  main {
+    max-width: 560px;
+    margin: 0 auto;
+  }
+
+  .title {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #1d1d1f;
+    margin-bottom: 16px;
+  }
+
+  .textarea-ios {
+    width: 100%;
+    height: 50vh;
+    padding: 5px;
+    box-sizing: border-box;
+    font-size: 16px;
+    font-family: -apple-system, BlinkMacSystemFont,
+      "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+    color: #1d1d1f;
+    background: #fff;
+
+    border: 1px solid #d2d2d7;
+    border-radius: 10px;
+
+    outline: none;
+    resize: vertical;
+
+    transition: all 0.2s ease;
+  }
+
+  .btn-outline {
+    width: 100%;
+    margin-top: 5px;
+    padding: 10px 16px;
+    font-size: 14px;
+    color: #333;
+    background: transparent;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .btn-outline:hover {
+    border-color: #3A99D8;
+    color: #3A99D8;
+  }
+</style>
+
+<body style="padding: 25px 0 0">
+  <header>
+    <h1 class="title">农历日程生成器</h1>
+  </header>
+  <main>
+    <div>CSV 内容:</div>
+    <textarea id="input" class="textarea-ios" oninput="updateTextByInput()">阳,3,1,张三生日
+农,4,2,李四生日
+Solar,5,20,Wedding Anniversary
+Lunar, 1, 1, Chinese New Year</textarea>
+    <button class="btn-outline" onclick="downloadICS()">保存为 .ics 文件</button>
+
+    <div>
+      .ics 文件可以直接导入进日历, 或上传至临时文件网站(如: <a href="https://as.al"
+          target="_blank">PasteShare</a>, <a href="https://www.sodatool.com/tool/file-transfer"
+          target="_blank">sodatool</a>), 以生成直接链接, 从日历 App 中订阅. 
+    </div>
+    <div style="position: relative; text-align: center;">
+      <p
+        style="position: relative; bottom: 0; left: 50%; transform: translateX(-50%); padding: 10px; background: #f0f0f0; text-decoration: none;border-radius: 8px;">
+        GitHub: <a href="https://github.com/thesomeexp/Lunar-Calendar-Generator"
+          target="_blank">Lunar-Calendar-Generator</a>
+      </p>
+    </div>
+  </main>
+  <script>
+    function pad(n) {
+      return String(n).padStart(2, '0');
+    }
+
+    function lunarToSolar(year, month, day) {
+      const lunar = Lunar.fromYmd(year, parseInt(month), parseInt(day));
+      const solar = lunar.getSolar();
+      return {
+        year: solar.getYear(),
+        month: solar.getMonth(),
+        day: solar.getDay()
+      };
+    }
+
+    function parseInput() {
+      const text = document.getElementById('input').value;
+      const lines = text.split('\n').filter(l => l.trim());
+      const events = [];
+      const nowYear = new Date().getFullYear();
+
+      lines.forEach(line => {
+        const [type, month, day, name] = line.split(',');
+
+        for (let i = 0; i < 20; i++) {
+          const year = nowYear + i;
+          let date;
+
+          if (type === '农' || type?.toLowerCase() === 'lunar') {
+            const solar = lunarToSolar(year, month, day);
+            date = `${solar.year}-${pad(solar.month)}-${pad(solar.day)}`;
+          } else {
+            date = `${year}-${pad(month)}-${pad(day)}`;
+          }
+
+          events.push({ date, name });
+        }
+      });
+
+      return events;
+    }
+
+    function generateICS(events) {
+      let ics = 'BEGIN:VCALENDAR\nVERSION:2.0\n';
+      ics += 'PRODID:-//p2gg//NONSGML v1.0//EN\n';
+      ics += 'NAME:Lunar\n';
+      ics += 'X-WR-CALNAME:Lunar\n';
+
+      const now = new Date();
+      const dtstamp = now.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+
+      events.forEach((e, index) => {
+        const date = e.date.replace(/-/g, '');
+        // 生成唯一 UID
+        const uid = `${e.name || 'event'}-${date}@p2gg.com`;
+
+        ics += `BEGIN:VEVENT\n` +
+          `UID:${uid}\n` +
+          `SEQUENCE:0\n` +
+          `DTSTAMP:${dtstamp}\n` +
+          `DTSTART;VALUE=DATE:${date}\n` +
+          `X-MICROSOFT-CDO-ALLDAYEVENT:TRUE\n` +
+          `X-MICROSOFT-MSNCALENDAR-ALLDAYEVENT:TRUE\n` +
+          `SUMMARY:${e.name || ''}\n` +
+          `DESCRIPTION:${e.description || ''}\n` +
+          `END:VEVENT\n`;
+      });
+
+      ics += 'END:VCALENDAR';
+      return ics;
+    }
+
+    function downloadICS() {
+      const events = parseInput();
+      const ics = generateICS(events);
+      const blob = new Blob([ics], { type: 'text/calendar' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'calendar.ics';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+
+</html>
